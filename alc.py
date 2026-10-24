@@ -705,3 +705,242 @@ def multiplica_rala_vector(A, v):
         return list(w)
     else:
         return w
+
+# =========================================================
+# LABORATORIO 8 - Descomposicion SVD
+# =========================================================
+
+def svd_reducida(A, k="max", tol=1e-15):
+    A = np.array(A, dtype=np.float64)
+    m, n = np.shape(A)
+
+    def matmul(X, Y):
+        filasX, colsX = np.shape(X)
+        _, colsY = np.shape(Y)
+        resultado = np.zeros((filasX, colsY))
+        for i in range(filasX):
+            for j in range(colsY):
+                suma = 0.0
+                for p in range(colsX):
+                    suma += X[i, p] * Y[p, j]
+                resultado[i, j] = suma
+        return resultado
+
+    def norma_vec(v):
+        s = 0.0
+        largo = np.shape(v)[0]
+        for i in range(largo):
+            s += v[i] ** 2
+        return s ** 0.5
+
+    if m >= n:
+        X = A
+    else:
+        X = A.T
+
+    XtX = matmul(X.T, X)
+
+    resultado_diag = diagRH(XtX, tol=tol)
+    if resultado_diag is None:
+        return None
+    S, D = resultado_diag
+
+    p = np.shape(XtX)[0]
+    r_max = p if k == "max" else min(k, p)
+
+    r_eff = 0
+    for i in range(p):
+        if r_eff >= r_max:
+            break
+        if D[i, i] <= tol:
+            break
+        r_eff += 1
+
+    V_chico = S[:, :r_eff]
+
+    B = matmul(X, V_chico)
+
+    filas_B = np.shape(B)[0]
+    sigma = np.zeros(r_eff)
+    U_grande = np.zeros((filas_B, r_eff))
+    for i in range(r_eff):
+        s_i = norma_vec(B[:, i])
+        sigma[i] = s_i
+        U_grande[:, i] = B[:, i] / s_i
+
+    if m >= n:
+        hatU = U_grande
+        hatV = V_chico
+    else:
+        hatU = V_chico
+        hatV = U_grande
+
+    return hatU, sigma, hatV
+
+#%%
+
+# =========================================================
+# TRABAJO PRÁCTICO
+# =========================================================
+
+# EJERCICIO 2 ==============
+
+def resolverDLT3D(Q):
+    Q = np.array(Q, dtype=np.float64)
+
+    # Matriz simétrica Q^T Q
+    QtQ = multiplicar(Q.T, Q)
+
+    # Diagonalización: columnas de S = autovectores, diagonal de D = autovalores
+    S, D = diagRH(QtQ)
+
+    # Buscar el índice del autovalor más chico
+    k = D.shape[0]
+    idx_min = 0
+    for i in range(1, k):
+        if D[i, i] < D[idx_min, idx_min]:
+            idx_min = i
+
+    # El autovector asociado es la solución (tiene norma 1)
+    m = S[:, idx_min]
+
+    # Reacomodar en 3 filas: 12 elementos -> 3x4, 9 elementos -> 3x3
+    M = m.reshape(3, -1)
+    return M
+
+#%%
+
+# EJERCICIO 3 ==============
+def obtenerQ2d(imgPts, objPts):
+    imgPts = np.array(imgPts, dtype=np.float64)
+    objPts = np.array(objPts, dtype=np.float64)
+
+    n = imgPts.shape[0]          # cantidad de puntos
+    Q = np.zeros((2 * n, 9))
+
+    for i in range(n):
+        U = objPts[i, 0]
+        V = objPts[i, 1]
+        u = imgPts[i, 0]
+        v = imgPts[i, 1]
+
+        # fila asociada a la coordenada u
+        Q[2 * i, :] = np.array([U, V, 1, 0, 0, 0, -u * U, -u * V, -u])
+
+        # fila asociada a la coordenada v
+        Q[2 * i + 1, :] = np.array([0, 0, 0, U, V, 1, -v * U, -v * V, -v])
+
+    return Q
+
+#Auxiliar
+def calcularV(H, i, j):
+    H = np.array(H, dtype=np.float64)
+    ci = H[:, i]
+    cj = H[:, j]
+
+    v = np.array([
+        ci[0] * cj[0],                    # coeficiente de B11
+        ci[0] * cj[1] + ci[1] * cj[0],    # coeficiente de B12 (B12 = B21)
+        ci[1] * cj[1],                    # coeficiente de B22
+        ci[2] * cj[0] + ci[0] * cj[2],    # coeficiente de B13 (B13 = B31)
+        ci[2] * cj[1] + ci[1] * cj[2],    # coeficiente de B23 (B23 = B32)
+        ci[2] * cj[2]                     # coeficiente de B33
+    ])
+    return v
+
+
+def armarA(Hlst):
+    N = len(Hlst)
+    A = np.zeros((2 * N, 6))
+
+    for j in range(N):
+        H = Hlst[j]
+
+        # vectores v para las columnas 1 y 2 de H (índices 0 y 1 en Python)
+        v12 = calcularV(H, 0, 1)
+        v11 = calcularV(H, 0, 0)
+        v22 = calcularV(H, 1, 1)
+
+        # restricción de perpendicularidad
+        A[2 * j, :] = v12
+        # restricción de igual norma
+        A[2 * j + 1, :] = v11 - v22
+
+    return A
+
+def calcularMatrizK2D(A):
+    A = np.array(A, dtype=np.float64)
+
+    # Escalamos A para que su mayor elemento valga 1.
+    # No cambia la solución de A b = 0, pero evita números enormes en A^T A
+    # que hacen fallar a diagRH por errores de redondeo.
+    A = A / np.max(np.abs(A))
+
+    # 1) Resolver A b = 0. Reutilizamos resolverDLT3D (misma lógica: autovector
+    #    del menor autovalor). Devuelve 3x2, así que lo volvemos a vector de 6.
+    b = resolverDLT3D(A).reshape(-1)
+
+    # 2) Armar B simétrica. b = (B11, B12, B22, B13, B23, B33)
+    B = np.array([[b[0], b[1], b[3]],
+                  [b[1], b[2], b[4]],
+                  [b[3], b[4], b[5]]])
+
+    # b sale a menos de un signo: si B no es definida positiva, la damos vuelta
+    if not esSDP(B, atol=0):
+        B = -B
+
+    # 3) Cholesky a partir de B = L D L^T  =>  B = (L sqrt(D)) (L sqrt(D))^T
+    L, D, V = calculaLDV(B)
+    raizD = np.zeros((3, 3))
+    for i in range(3):
+        raizD[i, i] = np.sqrt(D[i, i])
+    L_chol = multiplicar(L, raizD)
+
+    # Como L_chol = K^-T, entonces K = (L_chol^T)^-1
+    K = inversa(L_chol.T)
+
+    # 4) Normalizar para que K[2,2] = 1
+    K = K / K[2, 2]
+
+    return K
+
+#Auxiliar
+def productoVectorial(a, b):
+    return np.array([a[1] * b[2] - a[2] * b[1],
+                     a[2] * b[0] - a[0] * b[2],
+                     a[0] * b[1] - a[1] * b[0]])
+
+
+def obtenerPose2D(Hj, K):
+    Hj = np.array(Hj, dtype=np.float64)
+    Kinv = inversa(K)
+
+    # K^-1 por cada columna de H: da s*r1, s*r2 y s*t
+    a1 = multiplicar(Kinv, Hj[:, 0]).reshape(-1)
+    a2 = multiplicar(Kinv, Hj[:, 1]).reshape(-1)
+    a3 = multiplicar(Kinv, Hj[:, 2]).reshape(-1)
+
+    # Factor de escala: r1 tiene que tener norma 1
+    lam = 1 / norma(a1, 2)
+
+    # H viene a menos de un signo. Elegimos el signo que deja el tablero
+    # delante de la cámara (componente z de t positiva)
+    if a3[2] < 0:
+        lam = -lam
+
+    r1 = lam * a1
+    r2 = lam * a2
+    r3 = productoVectorial(r1, r2)   # tercer eje, perpendicular a r1 y r2
+    t = lam * a3
+
+    R = np.zeros((3, 3))
+    R[:, 0] = r1
+    R[:, 1] = r2
+    R[:, 2] = r3
+
+    # Con datos reales (ruido) R no queda exactamente ortonormal.
+    # Imponemos la restricción ortonormalizando sus columnas con Gram-Schmidt.
+    R, _ = QR_con_GS(R)
+
+    return R, t
+
