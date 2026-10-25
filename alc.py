@@ -812,10 +812,10 @@ def obtenerQ3d(imgPts, objPts):
     return Q
 
 
-def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
+def resolverHomogeneo(Q, tol=1e-14, maxIt=1000):
     Q = np.array(Q, dtype=np.float64)
 
-    # Q^T Q es 12x12, simétrica y semidefinida positiva
+    # Q^T Q es n x n, simétrica y semidefinida positiva
     QtQ = multiplicar(Q.T, Q)
     n = np.shape(QtQ)[0]
 
@@ -837,9 +837,17 @@ def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
             break
         x = y
 
-    # m = [m1; m2; m3] son las filas de M apiladas
-    M = np.reshape(x, (3, 4))
-    return M
+    return x
+
+
+def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
+    m = resolverHomogeneo(Q, tol, maxIt)
+    return np.reshape(m, (3, 4))
+
+
+def resolverDLT2D(Q, tol=1e-14, maxIt=1000):
+    h = resolverHomogeneo(Q, tol, maxIt)
+    return np.reshape(h, (3, 3))
 
 
 def devolverMatricesCalibracion3d(M, alfasIguales=False, sinSesgo=False):
