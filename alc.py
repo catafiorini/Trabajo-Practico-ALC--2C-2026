@@ -989,7 +989,7 @@ def calcularMatrizK2D(A):
 
     # 1) Resolver A b = 0. Reutilizamos resolverDLT3D (misma lógica: autovector
     #    del menor autovalor). Devuelve 3x2, así que lo volvemos a vector de 6.
-    b = resolverDLT3D(A).reshape(-1)
+    b = resolverHomogeneo(A)
 
     # 2) Armar B simétrica. b = (B11, B12, B22, B13, B23, B33)
     B = np.array([[b[0], b[1], b[3]],
