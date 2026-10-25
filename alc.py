@@ -783,30 +783,133 @@ def svd_reducida(A, k="max", tol=1e-15):
 # TRABAJO PRÁCTICO
 # =========================================================
 
-# EJERCICIO 2 ==============
+# =========================================================
+# TP - EJERCICIO 2: Calibración con puntos 3D (DLT / Tsai)
+# =========================================================
 
-def resolverDLT3D(Q):
+def obtenerQ3d(imgPts, objPts):
+    imgPts = np.array(imgPts, dtype=np.float64)
+    objPts = np.array(objPts, dtype=np.float64)
+    n = np.shape(objPts)[0]
+
+    Q = np.zeros((2 * n, 12))
+    for i in range(n):
+        u = imgPts[i, 0]
+        v = imgPts[i, 1]
+
+        # Punto en coordenadas homogéneas P_i = [U, V, W, 1]
+        P = np.ones(4)
+        P[0:3] = objPts[i, :]
+
+        # Fila de la ecuación de u:  [ P^T, 0^T, -u P^T ]
+        Q[2 * i, 0:4] = P
+        Q[2 * i, 8:12] = -u * P
+
+        # Fila de la ecuación de v:  [ 0^T, P^T, -v P^T ]
+        Q[2 * i + 1, 4:8] = P
+        Q[2 * i + 1, 8:12] = -v * P
+
+    return Q
+
+
+def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
     Q = np.array(Q, dtype=np.float64)
 
-    # Matriz simétrica Q^T Q
+    # Q^T Q es 12x12, simétrica y semidefinida positiva
     QtQ = multiplicar(Q.T, Q)
+    n = np.shape(QtQ)[0]
 
-    # Diagonalización: columnas de S = autovectores, diagonal de D = autovalores
-    S, D = diagRH(QtQ)
+    # Factorizamos una sola vez: Q^T Q = L U
+    L, U, _ = calculaLU(QtQ)
 
-    # Buscar el índice del autovalor más chico
-    k = D.shape[0]
-    idx_min = 0
-    for i in range(1, k):
-        if D[i, i] < D[idx_min, idx_min]:
-            idx_min = i
+    # Vector inicial cualquiera, normalizado
+    x = np.ones(n) / np.sqrt(n)
 
-    # El autovector asociado es la solución (tiene norma 1)
-    m = S[:, idx_min]
+    for _ in range(maxIt):
+        # Resolvemos (Q^T Q) y = x  ->  L z = x  y luego  U y = z
+        z = res_tri(L, x, inferior=True)
+        y = res_tri(U, z, inferior=False)
+        y = y / norma(y, 2)
 
-    # Reacomodar en 3 filas: 12 elementos -> 3x4, 9 elementos -> 3x3
-    M = m.reshape(3, -1)
+        # Si x e y tienen la misma dirección (salvo signo), convergió
+        if 1 - np.abs(np.sum(x * y)) < tol:
+            x = y
+            break
+        x = y
+
+    # m = [m1; m2; m3] son las filas de M apiladas
+    M = np.reshape(x, (3, 4))
     return M
+
+
+def devolverMatricesCalibracion3d(M, alfasIguales=False, sinSesgo=False):
+    M = np.array(M, dtype=np.float64)
+    a1 = M[0, 0:3]
+    a2 = M[1, 0:3]
+    a3 = M[2, 0:3]
+    b = M[:, 3]
+
+    # 1) Escala: ||rho a3|| = 1. El signo se elige para que t3 = rho*b3 > 0
+    #    (la mira queda delante de la cámara)
+    rho = 1 / norma(a3, 2)
+    if rho * b[2] < 0:
+        rho = -rho
+
+    # 2) Tercera fila de R
+    r3 = rho * a3
+
+    # 3) Punto principal: componente de las filas 1 y 2 en la dirección de r3
+    u0 = np.sum(rho * a1 * r3)
+    v0 = np.sum(rho * a2 * r3)
+
+    # 4) Fila 2:  rho a2 = alpha_v r2 + v0 r3
+    w2 = rho * a2 - v0 * r3
+    alfa_v = norma(w2, 2)
+    r2 = w2 / alfa_v
+
+    # 5) Fila 1:  rho a1 = alpha_u r1 + gamma r2 + u0 r3
+    gamma = np.sum(rho * a1 * r2)
+    w1 = rho * a1 - gamma * r2 - u0 * r3
+    alfa_u = norma(w1, 2)
+    r1 = w1 / alfa_u
+
+    # 6) (d) Restricciones opcionales sobre K
+    if sinSesgo:
+        gamma = 0.0
+    if alfasIguales:
+        promedio = (alfa_u + alfa_v) / 2
+        alfa_u = promedio
+        alfa_v = promedio
+
+    K = np.array([[alfa_u, gamma,  u0],
+                  [0.0,    alfa_v, v0],
+                  [0.0,    0.0,    1.0]])
+
+    if sinSesgo or alfasIguales:
+        # Con la K modificada, recalculamos R resolviendo K R = rho A
+        # columna por columna (sistema triangular, sin invertir K)
+        A = M[:, 0:3]
+        Rnueva = np.zeros((3, 3))
+        for j in range(3):
+            Rnueva[:, j] = res_tri(K, rho * A[:, j], inferior=False)
+
+        # Re-ortonormalizamos con Gram-Schmidt desde r3 hacia arriba
+        r3 = Rnueva[2, :] / norma(Rnueva[2, :], 2)
+        w2 = Rnueva[1, :] - np.sum(Rnueva[1, :] * r3) * r3
+        r2 = w2 / norma(w2, 2)
+        w1 = Rnueva[0, :] - np.sum(Rnueva[0, :] * r3) * r3 - np.sum(Rnueva[0, :] * r2) * r2
+        r1 = w1 / norma(w1, 2)
+
+    # Armamos R con las filas r1, r2, r3
+    R = np.zeros((3, 3))
+    R[0, :] = r1
+    R[1, :] = r2
+    R[2, :] = r3
+
+    # 7) Traslación: rho b = K t  ->  sistema triangular superior
+    t = res_tri(K, rho * b, inferior=False)
+
+    return R, t, K
 
 #%%
 
