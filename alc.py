@@ -1206,58 +1206,76 @@ def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt=100, atol=1e-6):
     # Normal al plano del objeto (W = 0)
     normal = np.array([0.0, 0.0, 1.0])
 
-    # Al principio suponemos proyección ortográfica escalada: eps_i = 0
-    eps = np.zeros(n - 1)
+    # Mejor pose entre las dos ramas
+    R_final = None
+    t_final = None
+    rms_final = None
 
-    R_mejor = None
-    t_mejor = None
-    rms_anterior = None
+    # --- Una corrida por cada rama inicial: 0 = (+lam, +mu), 1 = (-lam, -mu) ---
+    for rama in range(2):
+        # Al principio suponemos proyección ortográfica escalada: eps_i = 0
+        eps = np.zeros(n - 1)
 
-    # --- Iteraciones ---
-    for it in range(MaxIt):
-        # 1) Lados derechos con los eps actuales
-        bu = xs * (1 + eps) - m0[0]
-        bv = ys * (1 + eps) - m0[1]
+        R_mejor = None
+        t_mejor = None
+        rms_mejor = None
+        rms_anterior = None
 
-        # 2) Paso POS
-        I0, J0 = resolverPOS(A, bu, bv)
+        for it in range(MaxIt):
+            # 1) Lados derechos con los eps actuales
+            bu = xs * (1 + eps) - m0[0]
+            bv = ys * (1 + eps) - m0[1]
 
-        # 3) Las dos soluciones del caso coplanar: +(lam, mu) y -(lam, mu)
-        lam, mu = calculoLambdaMu(I0, J0)
-        candidatos = [(I0 + lam * normal, J0 + mu * normal),
-                      (I0 - lam * normal, J0 - mu * normal)]
+            # 2) Paso POS
+            I0, J0 = resolverPOS(A, bu, bv)
 
-        # 4) Evaluamos cada candidato y nos quedamos con el mejor válido
-        rms_it = None
-        for (Is, Js) in candidatos:
-            i, j, k, Z0, R, t = calcularSalidaPOSIT(Is, Js, fx, m0, M0)
-            validos, rms = evaluarPose(R, t, obj_vecs, img_vecs, K)
+            # 3) Las dos soluciones del caso coplanar
+            lam, mu = calculoLambdaMu(I0, J0)
+            candidatos = [(I0 + lam * normal, J0 + mu * normal),
+                          (I0 - lam * normal, J0 - mu * normal)]
 
-            # Si algún punto queda detrás de la cámara, se descarta
-            if validos < n:
-                continue
+            # En la primera iteración solo se usa la solución de esta rama
+            if it == 0:
+                candidatos = [candidatos[rama]]
 
-            if rms_it is None or rms < rms_it:
-                rms_it = rms
-                R_it = R
-                t_it = t
-                k_it = k
-                Z0_it = Z0
+            # 4) Evaluamos los candidatos y nos quedamos con el mejor válido
+            rms_it = None
+            for (Is, Js) in candidatos:
+                i, j, k, Z0, R, t = calcularSalidaPOSIT(Is, Js, fx, m0, M0)
+                validos, rms = evaluarPose(R, t, obj_vecs, img_vecs, K)
 
-        # Si ninguna solución es válida, cortamos con la última pose buena
-        if rms_it is None:
-            break
+                # Si algún punto queda detrás de la cámara, se descarta
+                if validos < n:
+                    continue
 
-        R_mejor = R_it
-        t_mejor = t_it
+                if rms_it is None or rms < rms_it:
+                    rms_it = rms
+                    R_it = R
+                    t_it = t
+                    k_it = k
+                    Z0_it = Z0
 
-        # 5) Nuevos factores de corrección de perspectiva: eps_i = (a_i . k) / Z0
-        for p in range(n - 1):
-            eps[p] = np.sum(A[p, :] * k_it) / Z0_it
+            # Si ninguna solución es válida, cortamos esta rama
+            if rms_it is None:
+                break
 
-        # 6) Convergencia: el RMS ya no mejora
-        if rms_anterior is not None and np.abs(rms_anterior - rms_it) < atol:
-            break
-        rms_anterior = rms_it
+            R_mejor = R_it
+            t_mejor = t_it
+            rms_mejor = rms_it
 
-    return R_mejor, t_mejor
+            # 5) Nuevos factores de corrección de perspectiva: eps_i = (a_i . k) / Z0
+            for p in range(n - 1):
+                eps[p] = np.sum(A[p, :] * k_it) / Z0_it
+
+            # 6) Convergencia: el RMS ya no mejora
+            if rms_anterior is not None and np.abs(rms_anterior - rms_it) < atol:
+                break
+            rms_anterior = rms_it
+
+        # Nos quedamos con la rama de menor RMS final
+        if rms_mejor is not None and (rms_final is None or rms_mejor < rms_final):
+            R_final = R_mejor
+            t_final = t_mejor
+            rms_final = rms_mejor
+
+    return R_final, t_final
