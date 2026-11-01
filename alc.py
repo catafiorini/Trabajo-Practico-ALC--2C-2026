@@ -1055,3 +1055,209 @@ def obtenerPose2D(Hj, K):
 
     return R, t
 
+#%%
+# TP - EJERCICIO 6: Aterrizaje suave (POSIT)
+
+def calculoLambdaMu(I0, J0):
+    I0 = np.array(I0, dtype=np.float64)
+    J0 = np.array(J0, dtype=np.float64)
+
+    # Parte real e imaginaria de C^2
+    a = np.sum(J0 * J0) - np.sum(I0 * I0)    # ||J0||^2 - ||I0||^2
+    b = -2 * np.sum(I0 * J0)                 # -2 (I0 . J0)
+
+    # Módulo de C^2
+    modulo = np.sqrt(a ** 2 + b ** 2)
+
+    # Raíz cuadrada del complejo a + ib (fórmula cerrada)
+    lam = np.sqrt((modulo + a) / 2)
+    mu = np.sqrt((modulo - a) / 2)
+
+    # mu lleva el signo de b, para que 2*lam*mu = b
+    if b < 0:
+        mu = -mu
+
+    return lam, mu
+
+
+
+def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
+    Is = np.array(Is, dtype=np.float64)
+    Js = np.array(Js, dtype=np.float64)
+    m0 = np.array(m0, dtype=np.float64)
+    M0 = np.array(M0, dtype=np.float64)
+
+    # 1) Profundidad: ||I|| = ||J|| = f / Z0 (promediamos por redondeo)
+    normaI = norma(Is, 2)
+    normaJ = norma(Js, 2)
+    Z0 = fx / ((normaI + normaJ) / 2)
+
+    # 2) Ejes de la cámara: normalizamos I y J, y k = i x j
+    i = Is / normaI
+    j = Js / normaJ
+    k = productoVectorial(i, j)
+
+    # 3) Rotación: filas i, j, k
+    R = np.zeros((3, 3))
+    R[0, :] = i
+    R[1, :] = j
+    R[2, :] = k
+
+    # 4) Posición de M0 en coordenadas de cámara, a partir de su imagen m0
+    T = np.array([Z0 / fx * m0[0],
+                  Z0 / fx * m0[1],
+                  Z0])
+
+    # 5) Traslación del modelo X = R M + t:  R M0 + t = T  =>  t = T - R M0
+    t = T - multiplicar(R, M0).reshape(-1)
+
+    return i, j, k, Z0, R, t
+
+def evaluarPose(R, t, obj_vecs, img_vecs, K):
+    R = np.array(R, dtype=np.float64)
+    t = np.array(t, dtype=np.float64)
+    obj_vecs = np.array(obj_vecs, dtype=np.float64)
+    img_vecs = np.array(img_vecs, dtype=np.float64)
+    K = np.array(K, dtype=np.float64)
+
+    n = np.shape(obj_vecs)[0]
+    validos = 0
+    suma_err2 = 0.0
+
+    for p in range(n):
+        # 1) Punto en coordenadas de cámara: X = R M + t
+        Xc = multiplicar(R, obj_vecs[p, :]).reshape(-1) + t
+
+        # 2) Proyección válida si el punto queda delante de la cámara
+        if Xc[2] > 0:
+            validos += 1
+
+        # 3) Proyección a la imagen: K X = (lambda u, lambda v, lambda)
+        proy = multiplicar(K, Xc).reshape(-1)
+        u_proy = proy[0] / proy[2]
+        v_proy = proy[1] / proy[2]
+
+        # 4) Error al cuadrado contra el punto observado
+        du = img_vecs[p, 0] - u_proy
+        dv = img_vecs[p, 1] - v_proy
+        suma_err2 += du ** 2 + dv ** 2
+
+    # RMS = raíz del promedio de los errores al cuadrado
+    rms = np.sqrt(suma_err2 / n)
+
+    return validos, rms
+
+# Auxiliar, para que quede mas legible
+def resolverPOS(A, bu, bv):
+    A = np.array(A, dtype=np.float64)
+    bu = np.array(bu, dtype=np.float64)
+    bv = np.array(bv, dtype=np.float64)
+
+    # Nos quedamos con las columnas U y V (la de W es toda cero)
+    A2 = A[:, 0:2]
+
+    # Ecuaciones normales: (A2^T A2) x = A2^T b
+    AtA = multiplicar(A2.T, A2)                   # 2 x 2
+    Atbu = multiplicar(A2.T, bu).reshape(-1)      # vector de 2
+    Atbv = multiplicar(A2.T, bv).reshape(-1)      # vector de 2
+
+    # Factorizamos una sola vez A2^T A2 = L U (sirve para I y para J)
+    L, U, _ = calculaLU(AtA)
+
+    # Resolvemos L z = A2^T b y luego U x = z, para I y para J
+    I2 = res_tri(U, res_tri(L, Atbu, inferior=True), inferior=False)
+    J2 = res_tri(U, res_tri(L, Atbv, inferior=True), inferior=False)
+
+    # Completamos con 0 la componente en la dirección normal n = (0, 0, 1)
+    I0 = np.zeros(3)
+    I0[0:2] = I2
+    J0 = np.zeros(3)
+    J0[0:2] = J2
+
+    return I0, J0
+
+def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt=100, atol=1e-6):
+    obj_vecs = np.array(obj_vecs, dtype=np.float64)
+    img_vecs = np.array(img_vecs, dtype=np.float64)
+    K = np.array(K, dtype=np.float64)
+    n = np.shape(obj_vecs)[0]
+
+    # --- Preparación ---
+    # Parámetros de la cámara
+    fx = K[0, 0]
+    fy = K[1, 1]
+    cu = K[0, 2]
+    cv = K[1, 2]
+
+    # Coordenadas de imagen centradas. La y se lleva a la escala de fx
+    # para poder usar una sola focal en todo el algoritmo.
+    x = img_vecs[:, 0] - cu
+    y = (img_vecs[:, 1] - cv) * (fx / fy)
+
+    # Punto de referencia M0 (el primero) y su imagen m0 = (x0, y0)
+    M0 = obj_vecs[0, :]
+    m0 = np.array([x[0], y[0]])
+
+    # Matriz A: filas a_i = Mi - M0 (sin M0, que daría una fila nula)
+    A = obj_vecs[1:n, :] - M0
+    xs = x[1:n]
+    ys = y[1:n]
+
+    # Normal al plano del objeto (W = 0)
+    normal = np.array([0.0, 0.0, 1.0])
+
+    # Al principio suponemos proyección ortográfica escalada: eps_i = 0
+    eps = np.zeros(n - 1)
+
+    R_mejor = None
+    t_mejor = None
+    rms_anterior = None
+
+    # --- Iteraciones ---
+    for it in range(MaxIt):
+        # 1) Lados derechos con los eps actuales
+        bu = xs * (1 + eps) - m0[0]
+        bv = ys * (1 + eps) - m0[1]
+
+        # 2) Paso POS
+        I0, J0 = resolverPOS(A, bu, bv)
+
+        # 3) Las dos soluciones del caso coplanar: +(lam, mu) y -(lam, mu)
+        lam, mu = calculoLambdaMu(I0, J0)
+        candidatos = [(I0 + lam * normal, J0 + mu * normal),
+                      (I0 - lam * normal, J0 - mu * normal)]
+
+        # 4) Evaluamos cada candidato y nos quedamos con el mejor válido
+        rms_it = None
+        for (Is, Js) in candidatos:
+            i, j, k, Z0, R, t = calcularSalidaPOSIT(Is, Js, fx, m0, M0)
+            validos, rms = evaluarPose(R, t, obj_vecs, img_vecs, K)
+
+            # Si algún punto queda detrás de la cámara, se descarta
+            if validos < n:
+                continue
+
+            if rms_it is None or rms < rms_it:
+                rms_it = rms
+                R_it = R
+                t_it = t
+                k_it = k
+                Z0_it = Z0
+
+        # Si ninguna solución es válida, cortamos con la última pose buena
+        if rms_it is None:
+            break
+
+        R_mejor = R_it
+        t_mejor = t_it
+
+        # 5) Nuevos factores de corrección de perspectiva: eps_i = (a_i . k) / Z0
+        for p in range(n - 1):
+            eps[p] = np.sum(A[p, :] * k_it) / Z0_it
+
+        # 6) Convergencia: el RMS ya no mejora
+        if rms_anterior is not None and np.abs(rms_anterior - rms_it) < atol:
+            break
+        rms_anterior = rms_it
+
+    return R_mejor, t_mejor
