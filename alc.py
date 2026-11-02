@@ -152,7 +152,7 @@ def normaMatMC(A, q, p, Np):
     for _ in range(Np):
         x = np.random.uniform(-1, 1, n)
         x = x / norma(x, p)
-        Ax = A @ x
+        Ax = multiplicar(A, x)
         norma_actual = norma(Ax, q)
         if norma_actual > max_norma:
             max_norma = norma_actual
@@ -554,18 +554,6 @@ def diagRH(A, tol=1e-15, K=1000):
             if abs(A[i, j] - A[j, i]) > 1e-8:
                 return None
 
-    def matmul(X, Y):
-        filasX, colsX = np.shape(X)
-        _, colsY = np.shape(Y)
-        resultado = np.zeros((filasX, colsY))
-        for i in range(filasX):
-            for j in range(colsY):
-                suma = 0.0
-                for p in range(colsX):
-                    suma += X[i, p] * Y[p, j]
-                resultado[i, j] = suma
-        return resultado
-
     v1, lam1, k1 = metpot2k(A, tol, K)
 
     e1 = np.zeros(n)
@@ -582,7 +570,7 @@ def diagRH(A, tol=1e-15, K=1000):
             for j in range(n):
                 Hv1[i, j] = Hv1[i, j] - 2 * dif[i] * dif[j] / norma_dif2
 
-    B = matmul(matmul(Hv1, A), Hv1.T)
+    B = multiplicar(multiplicar(Hv1, A), Hv1.T)
 
     if n == 2:
         S = Hv1
@@ -599,7 +587,7 @@ def diagRH(A, tol=1e-15, K=1000):
     bloque = np.eye(n)
     bloque[1:n, 1:n] = Stilde
 
-    S = matmul(Hv1, bloque)
+    S = multiplicar(Hv1, bloque)
 
     return S, D
 
@@ -648,19 +636,7 @@ def nucleo(A, tol=1e-15):
     A = np.array(A, dtype=np.float64)
     m, n = np.shape(A)
 
-    def matmul(X, Y):
-        filasX, colsX = np.shape(X)
-        _, colsY = np.shape(Y)
-        resultado = np.zeros((filasX, colsY))
-        for i in range(filasX):
-            for j in range(colsY):
-                suma = 0.0
-                for p in range(colsX):
-                    suma += X[i, p] * Y[p, j]
-                resultado[i, j] = suma
-        return resultado
-
-    AtA = matmul(A.T, A)
+    AtA = multiplicar(A.T, A)
 
     resultado_diag = diagRH(AtA, tol=tol)
     if resultado_diag is None:
@@ -714,18 +690,6 @@ def svd_reducida(A, k="max", tol=1e-15):
     A = np.array(A, dtype=np.float64)
     m, n = np.shape(A)
 
-    def matmul(X, Y):
-        filasX, colsX = np.shape(X)
-        _, colsY = np.shape(Y)
-        resultado = np.zeros((filasX, colsY))
-        for i in range(filasX):
-            for j in range(colsY):
-                suma = 0.0
-                for p in range(colsX):
-                    suma += X[i, p] * Y[p, j]
-                resultado[i, j] = suma
-        return resultado
-
     def norma_vec(v):
         s = 0.0
         largo = np.shape(v)[0]
@@ -738,7 +702,7 @@ def svd_reducida(A, k="max", tol=1e-15):
     else:
         X = A.T
 
-    XtX = matmul(X.T, X)
+    XtX = multiplicar(X.T, X)
 
     resultado_diag = diagRH(XtX, tol=tol)
     if resultado_diag is None:
@@ -758,7 +722,7 @@ def svd_reducida(A, k="max", tol=1e-15):
 
     V_chico = S[:, :r_eff]
 
-    B = matmul(X, V_chico)
+    B = multiplicar(X, V_chico)
 
     filas_B = np.shape(B)[0]
     sigma = np.zeros(r_eff)
@@ -812,32 +776,18 @@ def obtenerQ3d(imgPts, objPts):
     return Q
 
 
-def resolverHomogeneo(Q, tol=1e-14, maxIt=1000):
+def resolverHomogeneo(Q):
     Q = np.array(Q, dtype=np.float64)
-
-    # Q^T Q es n x n, simétrica y semidefinida positiva
+    
     QtQ = multiplicar(Q.T, Q)
-    n = np.shape(QtQ)[0]
-
-    # Factorizamos una sola vez: Q^T Q = L U
-    L, U, _ = calculaLU(QtQ)
-
-    # Vector inicial cualquiera, normalizado
-    x = np.ones(n) / np.sqrt(n)
-
-    for _ in range(maxIt):
-        # Resolvemos (Q^T Q) y = x  ->  L z = x  y luego  U y = z
-        z = res_tri(L, x, inferior=True)
-        y = res_tri(U, z, inferior=False)
-        y = y / norma(y, 2)
-
-        # Si x e y tienen la misma dirección (salvo signo), convergió
-        if 1 - np.abs(np.sum(x * y)) < tol:
-            x = y
-            break
-        x = y
-
-    return x
+    
+    S, D = diagRH(QtQ)
+    
+    # Como diagRH saca primero los autovalores más grandes, la última columna de S siempre corresponde al autovalor más chico.
+    # S es la matriz V de la descomposicion SVD de Q
+    m = S[:, -1]
+    
+    return m
 
 
 def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
@@ -849,74 +799,80 @@ def resolverDLT2D(Q, tol=1e-14, maxIt=1000):
     h = resolverHomogeneo(Q, tol, maxIt)
     return np.reshape(h, (3, 3))
 
+#Auxiliar
+def productoVectorial(a, b):
+    return np.array([a[1] * b[2] - a[2] * b[1],
+                     a[2] * b[0] - a[0] * b[2],
+                     a[0] * b[1] - a[1] * b[0]])
 
 def devolverMatricesCalibracion3d(M, alfasIguales=False, sinSesgo=False):
     M = np.array(M, dtype=np.float64)
-    a1 = M[0, 0:3]
-    a2 = M[1, 0:3]
-    a3 = M[2, 0:3]
+    
+    # Partición M = [A | b]
+    A = M[:, 0:3]
     b = M[:, 3]
-
-    # 1) Escala: ||rho a3|| = 1. El signo se elige para que t3 = rho*b3 > 0
-    #    (la mira queda delante de la cámara)
-    rho = 1 / norma(a3, 2)
-    if rho * b[2] < 0:
-        rho = -rho
-
-    # 2) Tercera fila de R
-    r3 = rho * a3
-
-    # 3) Punto principal: componente de las filas 1 y 2 en la dirección de r3
-    u0 = np.sum(rho * a1 * r3)
-    v0 = np.sum(rho * a2 * r3)
-
-    # 4) Fila 2:  rho a2 = alpha_v r2 + v0 r3
-    w2 = rho * a2 - v0 * r3
-    alfa_v = norma(w2, 2)
-    r2 = w2 / alfa_v
-
-    # 5) Fila 1:  rho a1 = alpha_u r1 + gamma r2 + u0 r3
-    gamma = np.sum(rho * a1 * r2)
-    w1 = rho * a1 - gamma * r2 - u0 * r3
-    alfa_u = norma(w1, 2)
-    r1 = w1 / alfa_u
-
-    # 6) (d) Restricciones opcionales sobre K
-    if sinSesgo:
-        gamma = 0.0
-    if alfasIguales:
-        promedio = (alfa_u + alfa_v) / 2
-        alfa_u = promedio
-        alfa_v = promedio
-
-    K = np.array([[alfa_u, gamma,  u0],
-                  [0.0,    alfa_v, v0],
-                  [0.0,    0.0,    1.0]])
-
+    
+    # Matriz de permutación P para invertir el orden de filas y columnas
+    P = np.array([[0.0, 0.0, 1.0],
+                  [0.0, 1.0, 0.0],
+                  [1.0, 0.0, 0.0]])
+    
+    # Factorización RQ:
+    # X = P @ A^T @ P = Q_qr @ R_qr
+    X = multiplicar(multiplicar(P, A.T), P)
+    Q_qr, R_qr = calculaQR(X, metodo='RH')
+    
+    K_raw = multiplicar(multiplicar(P, R_qr.T), P)
+    R_raw = multiplicar(multiplicar(P, Q_qr.T), P)
+    
+    # Ajustamos los signos de la diagonal de K para asegurar alpha_u > 0 y alpha_v > 0
+    for i in range(3):
+        if K_raw[i, i] < 0:
+            K_raw[:, i] = -K_raw[:, i]
+            R_raw[i, :] = -R_raw[i, :]
+            
+    # Normalizamos K para que K[2,2] = 1 (obteniendo el factor de escala rho)
+    rho = K_raw[2, 2]
+    K = K_raw / rho
+    
+    # Verificamos que R sea una rotación y no una reflexión (det(R) = +1 y no det(R) = -1)
+    r1, r2, r3 = R_raw[0, :], R_raw[1, :], R_raw[2, :]
+    det_R = np.sum(r1 * productoVectorial(r2, r3))
+    
+    if det_R < 0:
+        R_raw = -R_raw
+        b = -b
+        
+    R = R_raw
+    
+    # Calculamos el vector de traslación t resolviendo K@t = b / rho
+    t = res_tri(K, b / rho, inferior=False)
+    
+    # Restricciones opcionales sobre K (sinSesgo y/o alfasIguales)
     if sinSesgo or alfasIguales:
-        # Con la K modificada, recalculamos R resolviendo K R = rho A
-        # columna por columna (sistema triangular, sin invertir K)
-        A = M[:, 0:3]
-        Rnueva = np.zeros((3, 3))
+        if sinSesgo:
+            K[0, 1] = 0.0
+        if alfasIguales:
+            promedio = (K[0, 0] + K[1, 1]) / 2.0
+            K[0, 0] = promedio
+            K[1, 1] = promedio
+            
+        # Recalcular R resolviendo K@R = A / rho columna por columna
+        A_norm = A / rho
+        R_nueva = np.zeros((3, 3))
         for j in range(3):
-            Rnueva[:, j] = res_tri(K, rho * A[:, j], inferior=False)
-
-        # Re-ortonormalizamos con Gram-Schmidt desde r3 hacia arriba
-        r3 = Rnueva[2, :] / norma(Rnueva[2, :], 2)
-        w2 = Rnueva[1, :] - np.sum(Rnueva[1, :] * r3) * r3
-        r2 = w2 / norma(w2, 2)
-        w1 = Rnueva[0, :] - np.sum(Rnueva[0, :] * r3) * r3 - np.sum(Rnueva[0, :] * r2) * r2
-        r1 = w1 / norma(w1, 2)
-
-    # Armamos R con las filas r1, r2, r3
-    R = np.zeros((3, 3))
-    R[0, :] = r1
-    R[1, :] = r2
-    R[2, :] = r3
-
-    # 7) Traslación: rho b = K t  ->  sistema triangular superior
-    t = res_tri(K, rho * b, inferior=False)
-
+            R_nueva[:, j] = res_tri(K, A_norm[:, j], inferior=False)
+            
+        # Re-ortonormalizar R usando QR
+        Q_r, _ = calculaQR(R_nueva, metodo='RH')
+        det_R_nueva = np.sum(Q_r[0, :] * productoVectorial(Q_r[1, :], Q_r[2, :]))
+        if det_R_nueva < 0:
+            Q_r = -Q_r
+        R = Q_r
+        
+        # Recalcular t con la matriz K modificada
+        t = res_tri(K, b / rho, inferior=False)
+        
     return R, t, K
 
 #%%
@@ -1014,13 +970,6 @@ def calcularMatrizK2D(A):
     K = K / K[2, 2]
 
     return K
-
-#Auxiliar
-def productoVectorial(a, b):
-    return np.array([a[1] * b[2] - a[2] * b[1],
-                     a[2] * b[0] - a[0] * b[2],
-                     a[0] * b[1] - a[1] * b[0]])
-
 
 def obtenerPose2D(Hj, K):
     Hj = np.array(Hj, dtype=np.float64)
