@@ -776,7 +776,7 @@ def obtenerQ3d(imgPts, objPts):
     return Q
 
 
-def resolverHomogeneo(Q):
+def resolverHomogeneo(Q, tol=1e-14, maxIt=1000):
     Q = np.array(Q, dtype=np.float64)
     
     QtQ = multiplicar(Q.T, Q)
