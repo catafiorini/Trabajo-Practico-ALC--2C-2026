@@ -758,9 +758,7 @@ def svd_reducida(A, k="max", tol=1e-15):
 # TRABAJO PRÁCTICO
 # =========================================================
 
-# =========================================================
 # TP - EJERCICIO 2: Calibración con puntos 3D (DLT / Tsai)
-# =========================================================
 
 def obtenerQ3d(imgPts, objPts):
     imgPts = np.array(imgPts, dtype=np.float64)
@@ -1107,32 +1105,34 @@ def evaluarPose(R, t, obj_vecs, img_vecs, K):
 
     return validos, rms
 
+
 # Auxiliar, para que quede mas legible
-def resolverPOS(A, bu, bv):
+def resolverPOS(A, bu, bv, tol=1e-10):
     A = np.array(A, dtype=np.float64)
     bu = np.array(bu, dtype=np.float64)
     bv = np.array(bv, dtype=np.float64)
 
-    # Nos quedamos con las columnas U y V (la de W es toda cero)
-    A2 = A[:, 0:2]
+    # 1) SVD reducida: A = U Sigma V^T
+    U, sigma, V = svd_reducida(A)
 
-    # Ecuaciones normales: (A2^T A2) x = A2^T b
-    AtA = multiplicar(A2.T, A2)                   # 2 x 2
-    Atbu = multiplicar(A2.T, bu).reshape(-1)      # vector de 2
-    Atbv = multiplicar(A2.T, bv).reshape(-1)      # vector de 2
+    # 2) Nos quedamos solo con los valores singulares no nulos (rango de A)
+    r = 0
+    for s in sigma:
+        if s > tol * sigma[0]:
+            r += 1
+    U = U[:, 0:r]
+    V = V[:, 0:r]
+    sigma = sigma[0:r]
 
-    # Factorizamos una sola vez A2^T A2 = L U (sirve para I y para J)
-    L, U, _ = calculaLU(AtA)
+    # 3) A+ b = V Sigma^-1 U^T b
+    #    U^T b: proyectamos b sobre las columnas de U
+    Utbu = multiplicar(U.T, bu).reshape(-1)
+    Utbv = multiplicar(U.T, bv).reshape(-1)
 
-    # Resolvemos L z = A2^T b y luego U x = z, para I y para J
-    I2 = res_tri(U, res_tri(L, Atbu, inferior=True), inferior=False)
-    J2 = res_tri(U, res_tri(L, Atbv, inferior=True), inferior=False)
-
-    # Completamos con 0 la componente en la dirección normal n = (0, 0, 1)
-    I0 = np.zeros(3)
-    I0[0:2] = I2
-    J0 = np.zeros(3)
-    J0[0:2] = J2
+    #    Sigma^-1 es diagonal: dividimos cada componente por su valor singular,
+    #    y después multiplicamos por V
+    I0 = multiplicar(V, Utbu / sigma).reshape(-1)
+    J0 = multiplicar(V, Utbv / sigma).reshape(-1)
 
     return I0, J0
 
@@ -1142,7 +1142,6 @@ def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt=100, atol=1e-6):
     K = np.array(K, dtype=np.float64)
     n = np.shape(obj_vecs)[0]
 
-    # --- Preparación ---
     # Parámetros de la cámara
     fx = K[0, 0]
     fy = K[1, 1]
@@ -1166,76 +1165,58 @@ def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt=100, atol=1e-6):
     # Normal al plano del objeto (W = 0)
     normal = np.array([0.0, 0.0, 1.0])
 
-    # Mejor pose entre las dos ramas
-    R_final = None
-    t_final = None
-    rms_final = None
+    # Al principio suponemos proyección ortográfica escalada: eps_i = 0
+    eps = np.zeros(n - 1)
 
-    # --- Una corrida por cada rama inicial: 0 = (+lam, +mu), 1 = (-lam, -mu) ---
-    for rama in range(2):
-        # Al principio suponemos proyección ortográfica escalada: eps_i = 0
-        eps = np.zeros(n - 1)
+    R_mejor = None
+    t_mejor = None
+    rms_anterior = None
 
-        R_mejor = None
-        t_mejor = None
-        rms_mejor = None
-        rms_anterior = None
+    # Iteraciones
+    for it in range(MaxIt):
+        # 1) Lados derechos con los eps actuales
+        bu = xs * (1 + eps) - m0[0]
+        bv = ys * (1 + eps) - m0[1]
 
-        for it in range(MaxIt):
-            # 1) Lados derechos con los eps actuales
-            bu = xs * (1 + eps) - m0[0]
-            bv = ys * (1 + eps) - m0[1]
+        # 2) Paso POS
+        I0, J0 = resolverPOS(A, bu, bv)
 
-            # 2) Paso POS
-            I0, J0 = resolverPOS(A, bu, bv)
+        # 3) Las dos soluciones del caso coplanar: +(lam, mu) y -(lam, mu)
+        lam, mu = calculoLambdaMu(I0, J0)
+        candidatos = [(I0 + lam * normal, J0 + mu * normal),
+                      (I0 - lam * normal, J0 - mu * normal)]
 
-            # 3) Las dos soluciones del caso coplanar
-            lam, mu = calculoLambdaMu(I0, J0)
-            candidatos = [(I0 + lam * normal, J0 + mu * normal),
-                          (I0 - lam * normal, J0 - mu * normal)]
+        # 4) Evaluamos cada candidato y nos quedamos con el mejor válido
+        rms_it = None
+        for (Is, Js) in candidatos:
+            i, j, k, Z0, R, t = calcularSalidaPOSIT(Is, Js, fx, m0, M0)
+            validos, rms = evaluarPose(R, t, obj_vecs, img_vecs, K)
 
-            # En la primera iteración solo se usa la solución de esta rama
-            if it == 0:
-                candidatos = [candidatos[rama]]
+            # Si algún punto queda detrás de la cámara, se descarta
+            if validos < n:
+                continue
 
-            # 4) Evaluamos los candidatos y nos quedamos con el mejor válido
-            rms_it = None
-            for (Is, Js) in candidatos:
-                i, j, k, Z0, R, t = calcularSalidaPOSIT(Is, Js, fx, m0, M0)
-                validos, rms = evaluarPose(R, t, obj_vecs, img_vecs, K)
+            if rms_it is None or rms < rms_it:
+                rms_it = rms
+                R_it = R
+                t_it = t
+                k_it = k
+                Z0_it = Z0
 
-                # Si algún punto queda detrás de la cámara, se descarta
-                if validos < n:
-                    continue
+        # Si ninguna solución es válida, cortamos con la última pose buena
+        if rms_it is None:
+            break
 
-                if rms_it is None or rms < rms_it:
-                    rms_it = rms
-                    R_it = R
-                    t_it = t
-                    k_it = k
-                    Z0_it = Z0
+        R_mejor = R_it
+        t_mejor = t_it
 
-            # Si ninguna solución es válida, cortamos esta rama
-            if rms_it is None:
-                break
+        # 5) Nuevos factores de corrección de perspectiva: eps_i = (a_i . k) / Z0
+        for p in range(n - 1):
+            eps[p] = np.sum(A[p, :] * k_it) / Z0_it
 
-            R_mejor = R_it
-            t_mejor = t_it
-            rms_mejor = rms_it
+        # 6) Convergencia: el RMS ya no mejora
+        if rms_anterior is not None and np.abs(rms_anterior - rms_it) < atol:
+            break
+        rms_anterior = rms_it
 
-            # 5) Nuevos factores de corrección de perspectiva: eps_i = (a_i . k) / Z0
-            for p in range(n - 1):
-                eps[p] = np.sum(A[p, :] * k_it) / Z0_it
-
-            # 6) Convergencia: el RMS ya no mejora
-            if rms_anterior is not None and np.abs(rms_anterior - rms_it) < atol:
-                break
-            rms_anterior = rms_it
-
-        # Nos quedamos con la rama de menor RMS final
-        if rms_mejor is not None and (rms_final is None or rms_mejor < rms_final):
-            R_final = R_mejor
-            t_final = t_mejor
-            rms_final = rms_mejor
-
-    return R_final, t_final
+    return R_mejor, t_mejor
