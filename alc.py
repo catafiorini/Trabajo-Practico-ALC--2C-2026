@@ -549,6 +549,10 @@ def diagRH(A, tol=1e-15, K=1000):
     n, m = np.shape(A)
     if n != m:
         return None
+
+    # CORRECCIÓN 1: Forzar simetría inicial para eliminar el ruido flotante acumulado
+    A = (A + A.T) / 2.0
+
     for i in range(n):
         for j in range(n):
             if abs(A[i, j] - A[j, i]) > 1e-8:
@@ -578,7 +582,14 @@ def diagRH(A, tol=1e-15, K=1000):
         return S, D
 
     Atilde = B[1:n, 1:n]
-    Stilde, Dtilde = diagRH(Atilde, tol, K)
+    # CORRECCIÓN 2: Forzar simetría de la submatriz antes de llamar a la recursión
+    Atilde = (Atilde + Atilde.T) / 2.0
+
+    # CORRECCIÓN 3: Desempaquetado seguro por si acaso
+    resultado_rec = diagRH(Atilde, tol, K)
+    if resultado_rec is None:
+        return None
+    Stilde, Dtilde = resultado_rec
 
     D = np.zeros((n, n))
     D[0, 0] = lam1
