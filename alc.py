@@ -5,21 +5,49 @@ import numpy as np
 # =========================================================
 
 def error(x, y):
-    #calcula el error de aproximar x usando y
+    """
+    Calcula el error absoluto de aproximar x usando y.
+
+    Parámetros:
+        x: valor exacto (número o array).
+        y: valor aproximado (número o array).
+
+    Devuelve:
+        |x - y| (elemento a elemento si son arrays).
+    """
     x = np.array(x, dtype=np.float64)
     y = np.array(y, dtype=np.float64)
     return abs(x - y)
 
 
 def error_relativo(x, y):
-    #calcula el error relativo de aproximar x usando y
+    """
+    Calcula el error relativo de aproximar x usando y.
+
+    Parámetros:
+        x: valor exacto, distinto de 0 (número o array).
+        y: valor aproximado (número o array).
+
+    Devuelve:
+        |x - y| / |x| (elemento a elemento si son arrays).
+    """
     x = np.array(x, dtype=np.float64)
     y = np.array(y, dtype=np.float64)
     return error(x, y) / abs(x)
 
 
 def matricesIguales(A, B):
-    #devuelve True si dos matrices son iguales, o False en caso contrario
+    """
+    Decide si dos matrices son iguales, comparando elemento a elemento
+    con una tolerancia absoluta de 1e-8 (para no fallar por errores de redondeo).
+
+    Parámetros:
+        A, B: matrices (listas o arrays 2D).
+
+    Devuelve:
+        True si tienen la misma forma y todos sus elementos difieren en
+        menos de 1e-8; False en caso contrario.
+    """
     atol = 1e-8
     A = np.array(A, dtype=np.float64)
     B = np.array(B, dtype=np.float64)
@@ -44,7 +72,20 @@ def matricesIguales(A, B):
 # =========================================================
 
 def multiplicar(A, B):
-    #Funcion auxiliar para multiplicar matrices
+    """
+    Multiplica dos matrices con el algoritmo de tres ciclos:
+    C[i, j] = suma sobre k de A[i, k] * B[k, j].
+
+    Si A es un vector (1D) se lo toma como vector fila, y si B es un
+    vector (1D) se lo toma como vector columna.
+
+    Parámetros:
+        A: matriz de m x n (o vector de largo n).
+        B: matriz de n x p (o vector de largo n).
+
+    Devuelve:
+        C: matriz de m x p (siempre 2D; un vector columna sale como n x 1).
+    """
     A = np.array(A, dtype=np.float64)
     B = np.array(B, dtype=np.float64)
 
@@ -69,14 +110,32 @@ def multiplicar(A, B):
 
 
 def rota(theta):
-    # Retorna una matriz que rota un vector en angulo theta
+    """
+    Devuelve la matriz de rotación de R2 en un ángulo theta (sentido antihorario):
+        [[cos(theta), -sin(theta)],
+         [sin(theta),  cos(theta)]]
+
+    Parámetros:
+        theta: ángulo en radianes.
+
+    Devuelve:
+        Matriz de 2 x 2.
+    """
     c = np.cos(theta)
     s = np.sin(theta)
     return np.array([[c, -s], [s, c]])
 
 
 def escala(s):
-    # Da una matriz de nxn, con el tamaño de s
+    """
+    Devuelve la matriz diagonal que escala cada coordenada i por s[i].
+
+    Parámetros:
+        s: vector de largo n con los factores de escala.
+
+    Devuelve:
+        Matriz diagonal de n x n con s en la diagonal.
+    """
     s = np.array(s, dtype=np.float64)
     n = np.shape(s)[0]
     T = np.zeros((n, n))
@@ -86,13 +145,38 @@ def escala(s):
 
 
 def rota_y_escala(theta, s):
-    # Retorna una matriz de 2x2 que rota el vector en theta y dsp lo escala en un factor s
+    """
+    Devuelve la matriz que primero rota en un ángulo theta y después escala por s.
+    Como se aplica primero la rotación, el producto es escala(s) · rota(theta).
+
+    Parámetros:
+        theta: ángulo en radianes.
+        s: vector de largo 2 con los factores de escala.
+
+    Devuelve:
+        Matriz de 2 x 2.
+    """
     return multiplicar(escala(s), rota(theta))
 
 
 def afin(theta, s, b):
-    # Retorna una matriz de 3x3 que rota el vector en un angulo theta,
-    # luego lo escala en un factor s y por ultimo lo mueve en un valor fijo b
+    """
+    Devuelve la matriz de la transformación afín (en coordenadas homogéneas)
+    que rota en theta, escala por s y traslada por b:
+        [[ A  b ],
+         [ 0  1 ]]   con A = rota_y_escala(theta, s).
+
+    Usar coordenadas homogéneas permite escribir la traslación, que no es
+    lineal en R2, como un producto de matrices en R3.
+
+    Parámetros:
+        theta: ángulo en radianes.
+        s: vector de largo 2 con los factores de escala.
+        b: vector de largo 2 con la traslación.
+
+    Devuelve:
+        Matriz de 3 x 3.
+    """
     A = rota_y_escala(theta, s)
     b = np.array(b, dtype=np.float64)
 
@@ -105,7 +189,22 @@ def afin(theta, s, b):
 
 
 def trans_afin(v, theta, s, b):
-    # Retorna el vector w resultante de aplicar la transformacion afin a v
+    """
+    Aplica la transformación afín (rotar en theta, escalar por s, trasladar por b)
+    al vector v.
+
+    Pasa v a coordenadas homogéneas (v1, v2, 1), lo multiplica por afin(theta, s, b)
+    y devuelve las dos primeras coordenadas.
+
+    Parámetros:
+        v: vector de largo 2.
+        theta: ángulo en radianes.
+        s: vector de largo 2 con los factores de escala.
+        b: vector de largo 2 con la traslación.
+
+    Devuelve:
+        w: vector de largo 2 transformado.
+    """
     v = np.array(v, dtype=np.float64)
     M = afin(theta, s, b)
 
@@ -123,6 +222,18 @@ def trans_afin(v, theta, s, b):
 # =========================================================
 
 def norma(x, p):
+    """
+    Calcula la norma p de un vector:
+        ||x||_p = (suma de |x_i|^p)^(1/p)
+        ||x||_inf = max |x_i|
+
+    Parámetros:
+        x: vector.
+        p: número positivo, o 'inf' para la norma infinito.
+
+    Devuelve:
+        La norma (un número).
+    """
     x = np.array(x, dtype=np.float64)
     n = np.shape(x)[0]
 
@@ -136,6 +247,16 @@ def norma(x, p):
 
 
 def normaliza(X, p):
+    """
+    Normaliza cada vector de una lista para que tenga norma p igual a 1.
+
+    Parámetros:
+        X: lista de vectores (no nulos).
+        p: número positivo, o 'inf'.
+
+    Devuelve:
+        Lista con los vectores x / ||x||_p.
+    """
     resultado = []
     for x in X:
         x = np.array(x, dtype=np.float64)
@@ -144,6 +265,23 @@ def normaliza(X, p):
 
 
 def normaMatMC(A, q, p, Np):
+    """
+    Estima por Monte Carlo la norma inducida de A:
+        ||A||_{q,p} = max ||A x||_q  sobre los x con ||x||_p = 1.
+
+    Genera Np vectores al azar, los normaliza con la norma p y se queda con
+    el que hace más grande a ||A x||_q. Es una cota inferior de la norma real,
+    que mejora a medida que aumenta Np.
+
+    Parámetros:
+        A: matriz de m x n.
+        q: norma usada en la llegada (para A x).
+        p: norma usada en la salida (para x).
+        Np: cantidad de vectores al azar.
+
+    Devuelve:
+        (max_norma, x_max): la norma estimada y el vector donde se alcanzó.
+    """
     A = np.array(A, dtype=np.float64)
     filas, columnas = np.shape(A)
     n = columnas
@@ -161,6 +299,18 @@ def normaMatMC(A, q, p, Np):
 
 
 def normaExactaValor(A, valor):
+    """
+    Calcula de forma exacta la norma 1 o la norma infinito de una matriz:
+        ||A||_1   = máxima suma de valores absolutos por columna.
+        ||A||_inf = máxima suma de valores absolutos por fila.
+
+    Parámetros:
+        A: matriz (array 2D).
+        valor: 1 o 'inf'.
+
+    Devuelve:
+        La norma, o None si valor no es 1 ni 'inf'.
+    """
     n, m = np.shape(A)
 
     if valor == 1:
@@ -184,6 +334,17 @@ def normaExactaValor(A, valor):
 
 
 def normaExacta(A, p=[1, 'inf']):
+    """
+    Calcula de forma exacta la norma 1 y/o la norma infinito de una matriz
+    (usa normaExactaValor).
+
+    Parámetros:
+        A: matriz.
+        p: 1, 'inf' o una lista con esos valores (por defecto [1, 'inf']).
+
+    Devuelve:
+        Si p es una lista, una lista con cada norma; si no, un solo número.
+    """
     A = np.array(A, dtype=np.float64)
 
     if isinstance(p, list):
@@ -193,6 +354,20 @@ def normaExacta(A, p=[1, 'inf']):
 
 
 def condMC(A, p, Np=1000):
+    """
+    Estima por Monte Carlo el número de condición de A en norma p:
+        cond_p(A) = ||A||_p · ||A^-1||_p
+
+    Mide cuánto se puede amplificar el error relativo al resolver A x = b.
+
+    Parámetros:
+        A: matriz cuadrada inversible.
+        p: norma a usar.
+        Np: cantidad de vectores al azar para cada norma (por defecto 1000).
+
+    Devuelve:
+        El número de condición estimado (cota inferior del real).
+    """
     A = np.array(A, dtype=np.float64)
     Ainv = inversa(A)
     normaA, _ = normaMatMC(A, p, p, Np)
@@ -201,6 +376,17 @@ def condMC(A, p, Np=1000):
 
 
 def condExacta(A, p):
+    """
+    Calcula de forma exacta el número de condición de A en norma 1 o infinito:
+        cond_p(A) = ||A||_p · ||A^-1||_p
+
+    Parámetros:
+        A: matriz cuadrada inversible.
+        p: 1 o 'inf'.
+
+    Devuelve:
+        El número de condición.
+    """
     A = np.array(A, dtype=np.float64)
     Ainv = inversa(A)
     return normaExacta(A, p) * normaExacta(Ainv, p)
@@ -211,6 +397,23 @@ def condExacta(A, p):
 # =========================================================
 
 def calculaLU(A):
+    """
+    Calcula la factorización A = L U por eliminación gaussiana, sin pivoteo.
+
+    En cada paso k se calculan los multiplicadores m_ik = A[i, k] / A[k, k],
+    que se guardan en L, y se eliminan los elementos debajo del pivote,
+    lo que queda en U.
+
+    Parámetros:
+        A: matriz cuadrada.
+
+    Devuelve:
+        (L, U, op):
+            L: triangular inferior con unos en la diagonal.
+            U: triangular superior.
+            op: cantidad de operaciones realizadas.
+        Si A no es cuadrada o aparece un pivote nulo, devuelve (None, None, 0).
+    """
     if A is None:
         return None, None, 0
 
@@ -250,6 +453,20 @@ def calculaLU(A):
 
 
 def res_tri(L, b, inferior=True):
+    """
+    Resuelve un sistema triangular L x = b por sustitución.
+
+        inferior=True:  sustitución hacia adelante (de la primera fila a la última).
+        inferior=False: sustitución hacia atrás (de la última fila a la primera).
+
+    Parámetros:
+        L: matriz triangular de n x n con diagonal no nula.
+        b: vector de largo n.
+        inferior: True si L es triangular inferior, False si es superior.
+
+    Devuelve:
+        x: vector solución de largo n.
+    """
     L = np.array(L, dtype=np.float64)
     b = np.array(b, dtype=np.float64)
     n = np.shape(L)[0]
@@ -272,6 +489,18 @@ def res_tri(L, b, inferior=True):
 
 
 def inversa(A):
+    """
+    Calcula la inversa de A usando su factorización LU.
+
+    La columna i de A^-1 es la solución de A x = e_i. Como A = L U, se resuelve
+    en dos pasos triangulares: L y = e_i y después U x = y.
+
+    Parámetros:
+        A: matriz cuadrada.
+
+    Devuelve:
+        A^-1, o None si A es singular o no admite LU sin pivoteo.
+    """
     # Nota: esta version (basada en calculaLU) reemplaza a la del Labo 3
     A = np.array(A, dtype=np.float64)
     n = np.shape(A)[0]
@@ -296,6 +525,19 @@ def inversa(A):
 
 
 def calculaLDV(A):
+    """
+    Calcula la factorización A = L D V, con L triangular inferior y V triangular
+    superior (ambas con unos en la diagonal) y D diagonal.
+
+    Se obtiene A = L U y luego se factoriza U^T = L2 U2. La diagonal de U2 es D
+    y V = L2^T. Si A es simétrica, V = L^T.
+
+    Parámetros:
+        A: matriz cuadrada que admite LU sin pivoteo.
+
+    Devuelve:
+        (L, D, V).
+    """
     A = np.array(A, dtype=np.float64)
     n = np.shape(A)[0]
 
@@ -319,6 +561,20 @@ def calculaLDV(A):
 
 
 def esSDP(A, atol=1e-8):
+    """
+    Decide si A es simétrica definida positiva.
+
+    Primero chequea que A sea simétrica. Luego usa A = L D L^T: A es definida
+    positiva si y solo si todos los elementos de D son positivos.
+
+    Parámetros:
+        A: matriz cuadrada.
+        atol: tolerancia para la simetría y para considerar positivos
+              los elementos de D (por defecto 1e-8).
+
+    Devuelve:
+        True si A es SDP, False en caso contrario.
+    """
     A = np.array(A, dtype=np.float64)
     n = np.shape(A)[0]
 
@@ -344,6 +600,25 @@ def esSDP(A, atol=1e-8):
 # =========================================================
 
 def QR_con_GS(A, tol=1e-12, retorna_nops=False):
+    """
+    Calcula la factorización QR de A con el método de Gram-Schmidt.
+
+    Cada columna de A se ortogonaliza restándole su proyección sobre las
+    columnas de Q ya calculadas, y después se normaliza. Los coeficientes
+    de esas proyecciones y las normas forman R. Si una columna queda con
+    norma menor a tol (es combinación lineal de las anteriores), se descarta.
+
+    Parámetros:
+        A: matriz cuadrada de n x n.
+        tol: tolerancia para descartar columnas dependientes.
+        retorna_nops: si es True, también devuelve la cantidad de operaciones.
+
+    Devuelve:
+        (Q, R) o (Q, R, op):
+            Q: n x r con columnas ortonormales (r = columnas no descartadas).
+            R: r x n triangular superior.
+        Devuelve None si A no es cuadrada.
+    """
     A = np.array(A, dtype=np.float64)
     n, m = np.shape(A)
     if n != m:
@@ -397,6 +672,26 @@ def QR_con_GS(A, tol=1e-12, retorna_nops=False):
 
 
 def QR_con_HH(A, tol=1e-12, extras=False):
+    """
+    Calcula la factorización QR de A con reflexiones de Householder.
+
+    En el paso k se construye una reflexión H_k = I - 2 u u^T que lleva la
+    parte de la columna k que está desde la diagonal hacia abajo a un múltiplo
+    de e_1, lo que anula los elementos debajo de la diagonal. Al final:
+        R = H_n ... H_1 A    y    Q = H_1^T ... H_n^T.
+
+    Parámetros:
+        A: matriz de m x n con m >= n.
+        tol: tolerancia para saltear reflexiones con u casi nulo.
+        extras: si es True, también devuelve las Q y R intermedias.
+
+    Devuelve:
+        (Q, R) o (Q, R, extra_info):
+            Q: m x m ortogonal.
+            R: m x n triangular superior.
+            extra_info: diccionario con las listas 'R_matrices' y 'Q_matrices'.
+        Devuelve None si m < n.
+    """
     A = np.array(A, dtype=np.float64)
     m, n = np.shape(A)
     if m < n:
@@ -481,6 +776,17 @@ def QR_con_HH(A, tol=1e-12, extras=False):
 
 
 def calculaQR(A, metodo='RH', tol=1e-12):
+    """
+    Calcula la factorización QR de A con el método elegido.
+
+    Parámetros:
+        A: matriz.
+        metodo: 'RH' (reflexiones de Householder) o 'GS' (Gram-Schmidt).
+        tol: tolerancia que se le pasa al método.
+
+    Devuelve:
+        (Q, R), o None si el método no es válido.
+    """
     if metodo == 'RH':
         return QR_con_HH(A, tol=tol)
     elif metodo == 'GS':
@@ -494,6 +800,23 @@ def calculaQR(A, metodo='RH', tol=1e-12):
 # =========================================================
 
 def metpot2k(A, tol=1e-15, K=1000):
+    """
+    Método de la potencia para el autovalor de mayor módulo de A y su autovector.
+
+    En cada iteración se aplica A dos veces y se normaliza (o sea, se aplica A^2).
+    Esto evita que el vector oscile de signo cuando el autovalor dominante
+    es negativo. Se corta cuando el vector nuevo y el anterior son casi
+    iguales (producto interno cercano a 1) o al llegar a K iteraciones.
+    El autovalor se obtiene con el cociente de Rayleigh: lambda = v^T A v.
+
+    Parámetros:
+        A: matriz cuadrada.
+        tol: tolerancia del criterio de parada.
+        K: cantidad máxima de iteraciones.
+
+    Devuelve:
+        (v, lam, k): autovector de norma 1, autovalor y cantidad de iteraciones.
+    """
     A = np.array(A, dtype=np.float64)
     n = np.shape(A)[0]
 
@@ -543,6 +866,27 @@ def metpot2k(A, tol=1e-15, K=1000):
 
 
 def diagRH(A, tol=1e-15, K=1000):
+    """
+    Diagonaliza una matriz simétrica: A = S D S^T, con S ortogonal y D diagonal.
+
+    Usa deflación con Householder:
+        1) Con metpot2k se obtiene el autovalor dominante lambda_1 y su autovector v1.
+        2) Se arma la reflexión H que lleva v1 a e_1, así H A H^T queda con
+           lambda_1 en la posición (0, 0) y ceros en el resto de la primera
+           fila y columna.
+        3) Se repite recursivamente con la submatriz que queda.
+
+    Los autovalores quedan en D ordenados de mayor a menor módulo, y los
+    autovectores son las columnas de S. Antes de empezar se fuerza la simetría,
+    (A + A^T) / 2, para eliminar el ruido de redondeo.
+
+    Parámetros:
+        A: matriz simétrica de n x n.
+        tol, K: parámetros que se le pasan a metpot2k.
+
+    Devuelve:
+        (S, D), o None si A no es cuadrada o no es simétrica.
+    """
     A = np.array(A, dtype=np.float64)
     if np.ndim(A) != 2:
         return None
@@ -608,6 +952,18 @@ def diagRH(A, tol=1e-15, K=1000):
 # =========================================================
 
 def transiciones_al_azar_continuas(n):
+    """
+    Genera una matriz de transición de Markov al azar.
+
+    Los elementos se toman uniformes en [0, 1) y cada columna se divide por su
+    suma, así queda con elementos no negativos y columnas que suman 1.
+
+    Parámetros:
+        n: tamaño de la matriz.
+
+    Devuelve:
+        T: matriz de n x n estocástica por columnas.
+    """
     T = np.random.random((n, n))
     for j in range(n):
         suma_col = 0.0
@@ -620,6 +976,20 @@ def transiciones_al_azar_continuas(n):
 
 
 def transiciones_al_azar_uniformes(n, thres):
+    """
+    Genera una matriz de transición de Markov al azar con probabilidades uniformes.
+
+    En cada columna, los elementos cuyo número al azar es <= thres son los no
+    nulos, y todos valen 1 / (cantidad de no nulos). Si en una columna no queda
+    ninguno, se fuerza uno para que la columna sume 1.
+
+    Parámetros:
+        n: tamaño de la matriz.
+        thres: umbral en [0, 1]; cuanto más chico, más rala queda la matriz.
+
+    Devuelve:
+        T: matriz de n x n estocástica por columnas.
+    """
     R = np.random.random((n, n))
     T = np.zeros((n, n))
     for j in range(n):
@@ -644,6 +1014,20 @@ def transiciones_al_azar_uniformes(n, thres):
 
 
 def nucleo(A, tol=1e-15):
+    """
+    Calcula una base del núcleo de A.
+
+    Usa que Nu(A) = Nu(A^T A): diagonaliza A^T A con diagRH y se queda con los
+    autovectores cuyo autovalor es (casi) nulo.
+
+    Parámetros:
+        A: matriz de m x n.
+        tol: tolerancia para considerar nulo un autovalor.
+
+    Devuelve:
+        Matriz cuyas columnas son una base ortonormal del núcleo
+        (vacía si el núcleo es {0}), o None si falla la diagonalización.
+    """
     A = np.array(A, dtype=np.float64)
     m, n = np.shape(A)
 
@@ -663,6 +1047,19 @@ def nucleo(A, tol=1e-15):
 
 
 def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
+    """
+    Crea una matriz rala, guardando solo sus elementos no nulos en un diccionario.
+
+    Parámetros:
+        listado: lista [filas, columnas, valores], tres listas del mismo largo
+                 donde el elemento k indica que A[filas[k], columnas[k]] = valores[k].
+                 Puede ser una lista vacía.
+        m_filas, n_columnas: dimensiones de la matriz.
+        tol: los valores con módulo menor a tol no se guardan.
+
+    Devuelve:
+        [A_dict, (m_filas, n_columnas)], con A_dict[(i, j)] = valor.
+    """
     A_dict = {}
     if len(listado) == 0:
         return [A_dict, (m_filas, n_columnas)]
@@ -680,6 +1077,18 @@ def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
 
 
 def multiplica_rala_vector(A, v):
+    """
+    Multiplica una matriz rala (creada con crea_rala) por un vector.
+
+    Solo recorre los elementos no nulos: por cada A[i, j] suma A[i, j] * v[j] en w[i].
+
+    Parámetros:
+        A: matriz rala [A_dict, (m_filas, n_columnas)].
+        v: vector de largo n_columnas (lista o array).
+
+    Devuelve:
+        w = A v, de largo m_filas, del mismo tipo que v (lista o array).
+    """
     A_dict, (m_filas, n_columnas) = A
     es_lista = isinstance(v, list)
     v_arr = np.array(v, dtype=np.float64)
@@ -698,6 +1107,26 @@ def multiplica_rala_vector(A, v):
 # =========================================================
 
 def svd_reducida(A, k="max", tol=1e-15):
+    """
+    Calcula la descomposición en valores singulares reducida: A = U Sigma V^T.
+
+    Si m >= n, diagonaliza A^T A con diagRH: sus autovectores son las columnas de V
+    y sus autovalores son los sigma_i^2. Las columnas de U se obtienen como
+    u_i = A v_i / sigma_i. Si m < n, se trabaja con A^T y después se intercambian
+    U y V (así se diagonaliza siempre la matriz más chica).
+
+    Parámetros:
+        A: matriz de m x n.
+        k: cantidad de valores singulares a calcular ("max" para todos).
+        tol: los autovalores menores a tol se consideran nulos.
+
+    Devuelve:
+        (hatU, sigma, hatV):
+            hatU: m x r con columnas ortonormales.
+            sigma: vector con los r valores singulares no nulos, de mayor a menor.
+            hatV: n x r con columnas ortonormales.
+        Devuelve None si falla la diagonalización.
+    """
     A = np.array(A, dtype=np.float64)
     m, n = np.shape(A)
 
@@ -761,6 +1190,21 @@ def svd_reducida(A, k="max", tol=1e-15):
 # TP - EJERCICIO 2: Calibración con puntos 3D (DLT / Tsai)
 
 def obtenerQ3d(imgPts, objPts):
+    """
+    Arma la matriz Q del sistema DLT para calibración con puntos 3D.
+
+    Cada correspondencia (U, V, W) <-> (u, v) aporta 2 filas a Q, que salen de
+    despejar u y v de la ecuación de proyección q = M P, con P = (U, V, W, 1):
+        [ P^T,  0^T, -u P^T ]
+        [ 0^T,  P^T, -v P^T ]
+
+    Parámetros:
+        imgPts: array de n x 2 con las coordenadas (u, v) en píxeles.
+        objPts: array de n x 3 con las coordenadas (U, V, W) en el mundo.
+
+    Devuelve:
+        Q: array de 2n x 12. El vector m (M aplanada por filas) cumple Q m = 0.
+    """
     imgPts = np.array(imgPts, dtype=np.float64)
     objPts = np.array(objPts, dtype=np.float64)
     n = np.shape(objPts)[0]
@@ -786,6 +1230,23 @@ def obtenerQ3d(imgPts, objPts):
 
 
 def resolverHomogeneo(Q, tol=1e-14, maxIt=1000):
+    """
+    Resuelve el sistema homogéneo Q x = 0, buscando la solución no trivial
+    de norma 1 que minimiza ||Q x||.
+
+    Esa solución es el autovector de Q^T Q asociado a su menor autovalor
+    (equivalente al último vector singular derecho de Q). Como diagRH devuelve
+    los autovalores de mayor a menor, es la última columna de S.
+    Con datos exactos da el núcleo de Q; con ruido, la solución de
+    cuadrados mínimos.
+
+    Parámetros:
+        Q: matriz del sistema.
+        tol, maxIt: no se usan (diagRH usa sus valores por defecto).
+
+    Devuelve:
+        x: vector de norma 1, definido a menos de un signo.
+    """
     Q = np.array(Q, dtype=np.float64)
     
     QtQ = multiplicar(Q.T, Q)
@@ -800,21 +1261,82 @@ def resolverHomogeneo(Q, tol=1e-14, maxIt=1000):
 
 
 def resolverDLT3D(Q, tol=1e-14, maxIt=1000):
+    """
+    Resuelve el DLT 3D: obtiene la matriz de proyección M a partir de Q.
+
+    Resuelve Q m = 0 con resolverHomogeneo y reacomoda m como una matriz de 3 x 4.
+
+    Parámetros:
+        Q: matriz de 2n x 12 (de obtenerQ3d).
+        tol, maxIt: se le pasan a resolverHomogeneo.
+
+    Devuelve:
+        M: matriz de 3 x 4, definida a menos de un factor de escala.
+    """
     m = resolverHomogeneo(Q, tol, maxIt)
     return np.reshape(m, (3, 4))
 
 
 def resolverDLT2D(Q, tol=1e-14, maxIt=1000):
+    """
+    Resuelve el DLT 2D: obtiene la homografía H a partir de Q.
+
+    Resuelve Q h = 0 con resolverHomogeneo y reacomoda h como una matriz de 3 x 3.
+
+    Parámetros:
+        Q: matriz de 2n x 9 (de obtenerQ2d).
+        tol, maxIt: se le pasan a resolverHomogeneo.
+
+    Devuelve:
+        H: matriz de 3 x 3, definida a menos de un factor de escala.
+    """
     h = resolverHomogeneo(Q, tol, maxIt)
     return np.reshape(h, (3, 3))
 
 #Auxiliar
 def productoVectorial(a, b):
+    """
+    Calcula el producto vectorial a x b en R3. El resultado es perpendicular
+    a a y a b.
+
+    Parámetros:
+        a, b: vectores de largo 3.
+
+    Devuelve:
+        Vector de largo 3.
+    """
     return np.array([a[1] * b[2] - a[2] * b[1],
                      a[2] * b[0] - a[0] * b[2],
                      a[0] * b[1] - a[1] * b[0]])
 
 def devolverMatricesCalibracion3d(M, alfasIguales=False, sinSesgo=False):
+    """
+    Descompone la matriz de proyección M en parámetros intrínsecos y extrínsecos:
+        M = rho · K [R | t]
+
+    Se parte M = [A | b], con A = rho K R. Como K es triangular superior y R es
+    ortogonal, A se factoriza con una descomposición RQ, que se obtiene a partir
+    de QR usando la matriz de permutación P que invierte el orden de filas y
+    columnas. Después:
+        - se corrigen los signos para que la diagonal de K sea positiva,
+        - se normaliza K para que K[2, 2] = 1 (eso da rho),
+        - si det(R) = -1, se cambia el signo para que R sea una rotación,
+        - t se obtiene resolviendo K t = b / rho.
+
+    Restricciones opcionales sobre K:
+        alfasIguales: reemplaza alfa_u y alfa_v por su promedio.
+        sinSesgo: impone K[0, 1] = 0.
+    Si se usa alguna, se recalcula R resolviendo K R = A / rho, se vuelve a
+    ortonormalizar con QR, y se recalcula t.
+
+    Parámetros:
+        M: matriz de proyección de 3 x 4.
+        alfasIguales: si es True, impone alfa_u = alfa_v.
+        sinSesgo: si es True, impone K[0, 1] = 0.
+
+    Devuelve:
+        (R, t, K): rotación de 3 x 3, traslación de largo 3 e intrínsecos de 3 x 3.
+    """
     M = np.array(M, dtype=np.float64)
     
     # Partición M = [A | b]
@@ -888,6 +1410,21 @@ def devolverMatricesCalibracion3d(M, alfasIguales=False, sinSesgo=False):
 
 # EJERCICIO 3 ==============
 def obtenerQ2d(imgPts, objPts):
+    """
+    Arma la matriz Q del sistema DLT para estimar una homografía (caso coplanar).
+
+    Si los puntos están en el plano W = 0, la proyección se reduce a q = H p,
+    con p = (U, V, 1). Cada correspondencia (U, V) <-> (u, v) aporta 2 filas:
+        [ U, V, 1, 0, 0, 0, -u U, -u V, -u ]
+        [ 0, 0, 0, U, V, 1, -v U, -v V, -v ]
+
+    Parámetros:
+        imgPts: array de n x 2 con las coordenadas (u, v) en píxeles.
+        objPts: array de n x 2 con las coordenadas (U, V) sobre el plano.
+
+    Devuelve:
+        Q: array de 2n x 9. El vector h (H aplanada por filas) cumple Q h = 0.
+    """
     imgPts = np.array(imgPts, dtype=np.float64)
     objPts = np.array(objPts, dtype=np.float64)
 
@@ -910,6 +1447,21 @@ def obtenerQ2d(imgPts, objPts):
 
 #Auxiliar
 def calcularV(H, i, j):
+    """
+    Calcula el vector v_ij que permite escribir h_i^T B h_j como un producto
+    escalar lineal en los elementos de B:
+        h_i^T B h_j = v_ij · b,   con b = (B11, B12, B22, B13, B23, B33)
+
+    donde h_i y h_j son columnas de H y B = K^-T K^-1 es simétrica
+    (por eso tiene 6 incógnitas y no 9).
+
+    Parámetros:
+        H: homografía de 3 x 3.
+        i, j: índices de las columnas de H (0, 1 o 2).
+
+    Devuelve:
+        v: vector de largo 6.
+    """
     H = np.array(H, dtype=np.float64)
     ci = H[:, i]
     cj = H[:, j]
@@ -926,6 +1478,20 @@ def calcularV(H, i, j):
 
 
 def armarA(Hlst):
+    """
+    Arma la matriz A del método de Zhang para estimar K a partir de homografías.
+
+    Como H = s K [r1 r2 t] y r1, r2 son ortonormales, cada homografía da 2
+    ecuaciones lineales en b (los elementos de B = K^-T K^-1):
+        perpendicularidad:  h1^T B h2 = 0            ->  v12 · b = 0
+        igual norma:        h1^T B h1 = h2^T B h2    ->  (v11 - v22) · b = 0
+
+    Parámetros:
+        Hlst: lista de N homografías de 3 x 3.
+
+    Devuelve:
+        A: matriz de 2N x 6, tal que A b = 0.
+    """
     N = len(Hlst)
     A = np.zeros((2 * N, 6))
 
@@ -945,6 +1511,28 @@ def armarA(Hlst):
     return A
 
 def calcularMatrizK2D(A):
+    """
+    Calcula la matriz de intrínsecos K a partir de la matriz A del método de Zhang.
+
+    Pasos:
+        1) Resuelve A b = 0 con resolverHomogeneo (antes escala A para que su
+           mayor elemento sea 1, lo que mejora la estabilidad numérica).
+        2) Arma la matriz simétrica B con b. Como b sale a menos de un signo,
+           si B no es definida positiva se le cambia el signo.
+        3) Como B = K^-T K^-1, se obtiene K^-T con la factorización de Cholesky
+           de B, calculada a partir de B = L D L^T como L sqrt(D).
+        4) Invierte y normaliza para que K[2, 2] = 1.
+
+    Hacen falta al menos 3 homografías: K tiene 5 grados de libertad
+    y cada homografía aporta 2 ecuaciones.
+
+    Parámetros:
+        A: matriz de 2N x 6 (de armarA).
+
+    Devuelve:
+        K: matriz de 3 x 3 triangular superior. Si por el ruido B no queda
+           definida positiva, puede tener valores NaN.
+    """
     A = np.array(A, dtype=np.float64)
 
     # Escalamos A para que su mayor elemento valga 1.
@@ -952,8 +1540,7 @@ def calcularMatrizK2D(A):
     # que hacen fallar a diagRH por errores de redondeo.
     A = A / np.max(np.abs(A))
 
-    # 1) Resolver A b = 0. Reutilizamos resolverDLT3D (misma lógica: autovector
-    #    del menor autovalor). Devuelve 3x2, así que lo volvemos a vector de 6.
+    # 1) Resolver A b = 0 con resolverHomogeneo (autovector del menor autovalor).
     b = resolverHomogeneo(A)
 
     # 2) Armar B simétrica. b = (B11, B12, B22, B13, B23, B33)
@@ -981,6 +1568,23 @@ def calcularMatrizK2D(A):
     return K
 
 def obtenerPose2D(Hj, K):
+    """
+    Obtiene la pose (R, t) de la cámara a partir de una homografía y de K.
+
+    Como H = s K [r1 r2 t], multiplicando por K^-1 cada columna de H se obtienen
+    s r1, s r2 y s t. La escala s se fija pidiendo ||r1|| = 1, y su signo se
+    elige para que el plano quede delante de la cámara (t_z > 0).
+    La tercera columna es r3 = r1 x r2. Como con datos reales R no queda
+    exactamente ortonormal, al final se ortonormaliza con Gram-Schmidt.
+
+    Parámetros:
+        Hj: homografía de 3 x 3 de la vista.
+        K: matriz de intrínsecos de 3 x 3.
+
+    Devuelve:
+        (R, t): rotación de 3 x 3 y traslación de largo 3, tales que
+                X_cámara = R X_mundo + t.
+    """
     Hj = np.array(Hj, dtype=np.float64)
     Kinv = inversa(K)
 
@@ -1017,6 +1621,24 @@ def obtenerPose2D(Hj, K):
 # TP - EJERCICIO 6: Aterrizaje suave (POSIT)
 
 def calculoLambdaMu(I0, J0):
+    """
+    Calcula lambda y mu para el caso coplanar de POSIT.
+
+    Si los puntos son coplanares, el sistema POS deja indeterminada la componente
+    de I y J en la dirección normal n al plano:
+        I = I0 + lambda n,   J = J0 + mu n.
+    Imponiendo I · J = 0 y ||I|| = ||J|| se llega a:
+        lambda^2 - mu^2 = ||J0||^2 - ||I0||^2
+        2 lambda mu    = -2 (I0 · J0)
+    o sea, (lambda + i mu)^2 = C^2 con C^2 = a + i b. Se resuelve con la fórmula
+    de la raíz cuadrada de un número complejo.
+
+    Parámetros:
+        I0, J0: vectores de largo 3 (de resolverPOS).
+
+    Devuelve:
+        (lam, mu): una de las dos raíces. La otra es (-lam, -mu).
+    """
     I0 = np.array(I0, dtype=np.float64)
     J0 = np.array(J0, dtype=np.float64)
 
@@ -1040,6 +1662,24 @@ def calculoLambdaMu(I0, J0):
 
 
 def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
+    """
+    Obtiene la pose a partir de los vectores I y J de POSIT.
+
+    Como I = (f / Z0) i y J = (f / Z0) j:
+        - Z0 = f / ||I|| (se promedian ||I|| y ||J|| por el redondeo).
+        - i = I / ||I||, j = J / ||J||, k = i x j: son las filas de R.
+        - La posición de M0 en la cámara es T = (Z0/f · x0, Z0/f · y0, Z0),
+          y de R M0 + t = T sale t = T - R M0.
+
+    Parámetros:
+        Is, Js: vectores I y J de largo 3.
+        fx: distancia focal en píxeles.
+        m0: imagen centrada (x0, y0) del punto de referencia.
+        M0: punto de referencia en coordenadas del objeto.
+
+    Devuelve:
+        (i, j, k, Z0, R, t).
+    """
     Is = np.array(Is, dtype=np.float64)
     Js = np.array(Js, dtype=np.float64)
     m0 = np.array(m0, dtype=np.float64)
@@ -1072,6 +1712,22 @@ def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
     return i, j, k, Z0, R, t
 
 def evaluarPose(R, t, obj_vecs, img_vecs, K):
+    """
+    Evalúa una pose candidata: cuenta cuántos puntos quedan delante de la cámara
+    y calcula el error de reproyección.
+
+    Cada punto se pasa a coordenadas de cámara (X = R M + t), se proyecta con K
+    y se compara con el punto observado en la imagen.
+
+    Parámetros:
+        R, t: pose a evaluar.
+        obj_vecs: array de n x 3 con los puntos del objeto.
+        img_vecs: array de n x 2 con los puntos observados (u, v) en píxeles.
+        K: matriz de intrínsecos de 3 x 3.
+
+    Devuelve:
+        (validos, rms): cantidad de puntos con Z > 0 y error RMS en píxeles.
+    """
     R = np.array(R, dtype=np.float64)
     t = np.array(t, dtype=np.float64)
     obj_vecs = np.array(obj_vecs, dtype=np.float64)
@@ -1108,6 +1764,22 @@ def evaluarPose(R, t, obj_vecs, img_vecs, K):
 
 # Auxiliar, para que quede mas legible
 def resolverPOS(A, bu, bv, tol=1e-10):
+    """
+    Paso POS de POSIT: resuelve A I0 = bu y A J0 = bv por cuadrados mínimos.
+
+    Usa la pseudoinversa calculada con la SVD reducida: A+ = V Sigma^-1 U^T.
+    Se descartan los valores singulares casi nulos. En el caso coplanar A tiene
+    rango 2, y así se obtiene la solución de norma mínima, sin componente en
+    la dirección normal al plano (esa componente se agrega con calculoLambdaMu).
+
+    Parámetros:
+        A: matriz de (n-1) x 3 con filas Mi - M0.
+        bu, bv: lados derechos de largo n-1.
+        tol: tolerancia relativa para descartar valores singulares.
+
+    Devuelve:
+        (I0, J0): vectores de largo 3.
+    """
     A = np.array(A, dtype=np.float64)
     bu = np.array(bu, dtype=np.float64)
     bv = np.array(bv, dtype=np.float64)
@@ -1137,6 +1809,34 @@ def resolverPOS(A, bu, bv, tol=1e-10):
     return I0, J0
 
 def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt=100, atol=1e-6):
+    """
+    Estima la pose de la cámara con POSIT para puntos coplanares (sobre W = 0).
+
+    POSIT empieza suponiendo una proyección ortográfica escalada (eps_i = 0)
+    y la va corrigiendo hacia la perspectiva real:
+        1) Arma los lados derechos con los eps actuales.
+        2) Resuelve el sistema POS (resolverPOS).
+        3) Obtiene las dos soluciones del caso coplanar (calculoLambdaMu).
+        4) Calcula la pose de cada una (calcularSalidaPOSIT), descarta las que
+           dejan puntos detrás de la cámara y se queda con la de menor error
+           de reproyección.
+        5) Actualiza eps_i = (Mi - M0) · k / Z0.
+    Se repite hasta que el error RMS deja de cambiar o se llega a MaxIt.
+
+    Las coordenadas v se reescalan por fx / fy para trabajar con una sola focal.
+
+    Parámetros:
+        obj_vecs: array de n x 3 con los puntos del objeto. El primero es el
+                  punto de referencia M0.
+        img_vecs: array de n x 2 con los puntos (u, v) en píxeles, en el mismo orden.
+        K: matriz de intrínsecos de 3 x 3.
+        MaxIt: cantidad máxima de iteraciones.
+        atol: tolerancia sobre el cambio del error RMS.
+
+    Devuelve:
+        (R, t): pose tal que X_cámara = R X_objeto + t.
+                Si ninguna solución es válida, (None, None).
+    """
     obj_vecs = np.array(obj_vecs, dtype=np.float64)
     img_vecs = np.array(img_vecs, dtype=np.float64)
     K = np.array(K, dtype=np.float64)
